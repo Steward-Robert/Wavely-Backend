@@ -5,7 +5,7 @@ import createToken from "../utils/jwt-cookie.js";
 const registerUser = async (req, res) => {
   try {
     const { email, name, password } = req.body;
-    const user = await prisma.user.findUnique({
+    const user = await prisma.User.findUnique({
       where: { email },
     });
     if (user) {
@@ -49,6 +49,9 @@ const loginUser = async (req, res) => {
     if (!isMatch) {
       return res.status(400).json({ message: "Invalid email or password" });
     }
+    if (!user.isActive) {
+      return res.status(403).json({ message: "This account is deactivated." });
+    }
     let token = await createToken(user.id, res);
     res.json({
       message: "Login successful",
@@ -65,6 +68,9 @@ const logout = async (req, res) => {
   res.cookie("jwt", "", {
     httpOnly: true,
     expires: new Date(0),
+    secure: process.env.MODE_DEV === "production",
+    sameSite: "strict",
+    path: "/",
   });
   res.status(200).json({ message: "Logged out succesfully", status: "succes" });
 };

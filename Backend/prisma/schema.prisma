@@ -8,24 +8,37 @@ datasource db {
 }
 
 model User {
-  id        String    @id @default(uuid())
-  email     String    @unique
-  name      String
-  password  String
-  createdAt DateTime  @default(now())
-  role      Role      @default(USER)
-  comments  Comment[]
-  likes     Like[]
-  posts     Post[]
-  avatars   Avatar[]
+  id             String    @id @default(uuid())
+  email          String    @unique
+  name           String
+  password       String
+  createdAt      DateTime  @default(now())
+  role           Role      @default(USER)
+  isActive       Boolean   @default(true)
+  comments       Comment[]
+  likes          Like[]
+  posts          Post[]
+  stories        Story[]
+  avatar         Avatar?
+  reportsFiled   Report[]  @relation("ReportReporter")
+  reportsHandled Report[]  @relation("ReportHandler")
 }
 
 model Avatar {
   id     String  @id @default(uuid())
   avatar String?
 
-  ownerId String
+  ownerId String @unique
   owner   User   @relation(fields: [ownerId], references: [id])
+}
+
+model Story {
+  id        String   @id @default(uuid())
+  content   String?
+  image     String?
+  authorId  String
+  createdAt DateTime @default(now())
+  author    User     @relation(fields: [authorId], references: [id])
 }
 
 model Post {
@@ -60,6 +73,38 @@ model Like {
   user      User     @relation(fields: [userId], references: [id])
 
   @@unique([postId, userId])
+}
+
+model Report {
+  id            String           @id @default(uuid())
+  type          String
+  reason        String
+  attachmentUrl String?
+  targetType    ReportTargetType @default(PLATFORM)
+  targetId      String?
+  status        ReportStatus     @default(OPEN)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  reporterId    String
+  handledById   String?
+  reporter      User             @relation("ReportReporter", fields: [reporterId], references: [id])
+  handledBy     User?            @relation("ReportHandler", fields: [handledById], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([targetType, targetId])
+}
+
+enum ReportTargetType {
+  PLATFORM
+  USER
+  POST
+  COMMENT
+}
+
+enum ReportStatus {
+  OPEN
+  REVIEWED
+  DISMISSED
 }
 
 enum Role {

@@ -6,11 +6,11 @@ import {
   updatePost,
   allPost,
 } from "../controller/post-controller.js";
-import upload from "../controller/upload-images.js";
+import { uploadMany } from "../controller/multer.js";
 
 const postRouter = Router();
 
-postRouter.post("/", authentification, upload.single("image"), post);
+postRouter.post("/", authentification, uploadMany, post);
 postRouter.delete("/:postId", authentification, deletePost);
 postRouter.put("/:postId", authentification, updatePost);
 postRouter.get("/", authentification, allPost);
