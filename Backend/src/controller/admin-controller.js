@@ -159,18 +159,62 @@ const updateUserStatus = async (req, res) => {
   }
 };
 
+const adminPostAuthors = async (req, res) => {
+  try {
+    const { page, limit, skip } = pageOptions(req.query);
+    const search = String(req.query.q || "").trim();
+    const where = {
+      posts: { some: {} },
+      ...(search ? { name: { contains: search, mode: "insensitive" } } : {}),
+    };
+    const [authors, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        select: {
+          id: true,
+          name: true,
+          role: true,
+          avatar: { select: { avatar: true } },
+          _count: { select: { posts: true } },
+        },
+        orderBy: { name: "asc" },
+        skip,
+        take: limit,
+      }),
+      prisma.user.count({ where }),
+    ]);
+    return res.status(200).json({
+      authors,
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Unable to load post authors" });
+  }
+};
+
 const adminPosts = async (req, res) => {
   try {
     const { page, limit, skip } = pageOptions(req.query);
     const search = String(req.query.q || "").trim();
-    const where = search
-      ? { content: { contains: search, mode: "insensitive" } }
-      : {};
+    const authorId = String(req.query.authorId || "").trim();
+    const where = {
+      ...(search ? { content: { contains: search, mode: "insensitive" } } : {}),
+      ...(authorId ? { authorId } : {}),
+    };
     const [posts, total] = await Promise.all([
       prisma.post.findMany({
         where,
         include: {
-          author: { select: { id: true, name: true } },
+          author: {
+            select: {
+              id: true,
+              name: true,
+              role: true,
+              avatar: { select: { avatar: true } },
+              _count: { select: { posts: true } },
+            },
+          },
           _count: { select: { comments: true, likes: true } },
         },
         orderBy: { createdAt: "desc" },
@@ -327,6 +371,7 @@ export {
   adminOverview,
   adminUsers,
   updateUserStatus,
+  adminPostAuthors,
   adminPosts,
   deleteAdminPost,
   adminComments,

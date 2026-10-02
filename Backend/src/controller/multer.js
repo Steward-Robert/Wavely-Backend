@@ -17,13 +17,32 @@ export const uploadMany = (req, res, next) => {
   });
 };
 
+export const uploadPostMedia = (req, res, next) => {
+  upload.fields([
+    { name: "image", maxCount: 9 },
+    { name: "video", maxCount: 9 },
+  ])(req, res, (error) => {
+    if (error) {
+      return res.status(400).json({
+        message:
+          error.code === "LIMIT_UNEXPECTED_FILE"
+            ? "Invalid media field or too many files"
+            : error.message,
+      });
+    }
+    next();
+  });
+};
+
 const reportUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (_req, file, callback) => {
     const allowedTypes = ["image/jpeg", "image/png", "application/pdf"];
     if (!allowedTypes.includes(file.mimetype)) {
-      return callback(new multer.MulterError("LIMIT_UNEXPECTED_FILE", file.fieldname));
+      return callback(
+        new multer.MulterError("LIMIT_UNEXPECTED_FILE", file.fieldname),
+      );
     }
     callback(null, true);
   },

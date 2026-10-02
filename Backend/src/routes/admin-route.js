@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   adminComments,
   adminOverview,
+  adminPostAuthors,
   adminPosts,
   adminReports,
   adminUsers,
@@ -19,6 +20,7 @@ adminRouter.use(authentification, requireAdmin);
 adminRouter.get("/overview", adminOverview);
 adminRouter.get("/users", adminUsers);
 adminRouter.patch("/users/:userId/status", updateUserStatus);
+adminRouter.get("/posts/authors", adminPostAuthors);
 adminRouter.get("/posts", adminPosts);
 adminRouter.delete("/posts/:postId", deleteAdminPost);
 adminRouter.get("/comments", adminComments);

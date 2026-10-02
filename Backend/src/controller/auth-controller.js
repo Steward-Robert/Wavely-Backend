@@ -2,6 +2,10 @@ import { prisma } from "../db.js";
 import bcrypt from "bcrypt";
 import createToken from "../utils/jwt-cookie.js";
 
+const isProduction =
+  process.env.NODE_ENV === "production" ||
+  process.env.MODE_DEV === "production";
+
 const registerUser = async (req, res) => {
   try {
     const { email, name, password } = req.body;
@@ -68,8 +72,8 @@ const logout = async (req, res) => {
   res.cookie("jwt", "", {
     httpOnly: true,
     expires: new Date(0),
-    secure: process.env.MODE_DEV === "production",
-    sameSite: "strict",
+    secure: isProduction,
+    sameSite: isProduction ? "none" : "strict",
     path: "/",
   });
   res.status(200).json({ message: "Logged out succesfully", status: "succes" });

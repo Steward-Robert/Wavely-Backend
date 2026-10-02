@@ -45,6 +45,7 @@ model Post {
   id        String  @id @default(uuid())
   content   String?
   image     String?
+  mediaType String  @default("image")
   published Boolean @default(false)
   authorId  String
 

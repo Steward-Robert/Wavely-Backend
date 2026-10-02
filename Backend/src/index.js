@@ -15,10 +15,14 @@ import adminRouter from "./routes/admin-route.js";
 import reportRouter from "./routes/report-route.js";
 
 const app = express();
+const allowedOrigins = (process.env.FRONTEND_URL || "http://localhost:5173")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: allowedOrigins,
     credentials: true,
   }),
 );

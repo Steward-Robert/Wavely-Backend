@@ -4,9 +4,10 @@ import { randomUUID } from "node:crypto";
 
 const uploadPost = async (req, res) => {
   try {
-    const files = req.files;
+    const files = [...(req.files?.image ?? []), ...(req.files?.video ?? [])];
     const id = req.user?.id;
     const { content } = req.body;
+    const normalizedContent = typeof content === "string" ? content.trim() : "";
 
     if (!id) {
       return res.status(401).json({
@@ -14,9 +15,9 @@ const uploadPost = async (req, res) => {
       });
     }
 
-    if (!files || files.length === 0) {
+    if (!normalizedContent && files.length === 0) {
       return res.status(400).json({
-        message: "Add a file to continue",
+        message: "Add text or media to create a post",
       });
     }
 
@@ -25,6 +26,18 @@ const uploadPost = async (req, res) => {
     }
 
     const uploadedPosts = [];
+    if (files.length === 0) {
+      uploadedPosts.push(
+        await prisma.post.create({
+          data: {
+            content: normalizedContent,
+            authorId: id,
+            mediaType: "text",
+          },
+        }),
+      );
+    }
+
     for (const file of files) {
       const fileName = `${randomUUID()}-${file.originalname}`;
 
@@ -47,9 +60,10 @@ const uploadPost = async (req, res) => {
 
       const post = await prisma.post.create({
         data: {
-          content,
+          content: normalizedContent || null,
           image: publicData.publicUrl,
           authorId: id,
+          mediaType: file.mimetype.startsWith("video/") ? "video" : "image",
         },
       });
       uploadedPosts.push(post);
@@ -68,14 +82,35 @@ const uploadPost = async (req, res) => {
   }
 };
 
-const allPost = async (_req, res) => {
+const allPost = async (req, res) => {
   try {
     const posts = await prisma.post.findMany({
-      include: { author: { select: { id: true, name: true } } },
+      include: {
+        author: {
+          select: {
+            id: true,
+            name: true,
+            role: true,
+            avatar: {
+              select: { avatar: true },
+            },
+          },
+        },
+        _count: { select: { likes: true, comments: true } },
+        likes: {
+          where: { userId: req.user.id },
+          select: { id: true },
+        },
+      },
       orderBy: { createdAt: "desc" },
     });
 
-    return res.status(200).json({ posts });
+    return res.status(200).json({
+      posts: posts.map(({ likes, ...post }) => ({
+        ...post,
+        likedByUser: likes.length > 0,
+      })),
+    });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: "Server error" });
