@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import supabase from "./spabse.js";
 import { prisma } from "../db.js";
 
@@ -18,7 +19,7 @@ const uploadAvatar = async (req, res) => {
       });
     }
 
-    const filePath = `Avatars/${userId}`;
+    const filePath = `Avatars/${userId}/${randomUUID()}`;
     const previousAvatars = await prisma.avatar.findMany({
       where: { ownerId: userId },
       select: { avatar: true },
