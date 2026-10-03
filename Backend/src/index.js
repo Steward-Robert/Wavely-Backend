@@ -15,8 +15,12 @@ import adminRouter from "./routes/admin-route.js";
 import reportRouter from "./routes/report-route.js";
 
 const app = express();
-const allowedOrigins = "https://wavely-bnob.onrender.com"
-  .split(",")
+const allowedOrigins = [
+  "https://wavely-bnob.onrender.com",
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  ...(process.env.CLIENT_ORIGINS || "").split(","),
+]
   .map((origin) => origin.trim())
   .filter(Boolean);
 
