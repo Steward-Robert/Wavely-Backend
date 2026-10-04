@@ -22,6 +22,7 @@ model User {
   avatar         Avatar?
   reportsFiled   Report[]  @relation("ReportReporter")
   reportsHandled Report[]  @relation("ReportHandler")
+  save Saved[]
 }
 
 model Avatar {
@@ -29,7 +30,19 @@ model Avatar {
   avatar String?
 
   ownerId String @unique
-  owner   User   @relation(fields: [ownerId], references: [id])
+  owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+}
+
+model Saved {
+    id     String  @id @default(uuid())
+    postID String
+    userID String
+    createAt DateTime @default(now())
+
+    user User @relation(fields: [userID], references: [id] , onDelete: Cascade)
+    post Post @relation(fields: [postID], references: [id], onDelete: Cascade)
+
+    @@unique([postID , userID])
 }
 
 model Story {
@@ -38,7 +51,7 @@ model Story {
   image     String?
   authorId  String
   createdAt DateTime @default(now())
-  author    User     @relation(fields: [authorId], references: [id])
+  author    User     @relation(fields: [authorId], references: [id] , onDelete: Cascade)
 }
 
 model Post {
@@ -53,6 +66,7 @@ model Post {
   comments  Comment[]
   likes     Like[]
   author    User      @relation(fields: [authorId], references: [id])
+  save Saved[]
 }
 
 model Comment {
