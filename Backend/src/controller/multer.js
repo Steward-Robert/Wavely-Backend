@@ -1,4 +1,32 @@
 import multer from "multer";
+
+const avatarUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, callback) => {
+    const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
+    if (!allowedTypes.includes(file.mimetype)) {
+      return callback(
+        new multer.MulterError("LIMIT_UNEXPECTED_FILE", file.fieldname),
+      );
+    }
+    callback(null, true);
+  },
+});
+
+export const uploadAvatarFile = (req, res, next) => {
+  avatarUpload.single("image")(req, res, (error) => {
+    if (error) {
+      const message =
+        error.code === "LIMIT_FILE_SIZE"
+          ? "Avatar images must be 10 MB or smaller"
+          : "Avatars must be JPG, PNG, or WebP images";
+      return res.status(400).json({ message });
+    }
+    next();
+  });
+};
+
 const upload = multer({
   storage: multer.memoryStorage(),
 });

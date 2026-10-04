@@ -20,24 +20,42 @@ const uploadAvatar = async (req, res) => {
     }
 
     const filePath = `Avatars/${userId}/${randomUUID()}`;
-    const previousAvatars = await prisma.avatar.findMany({
-      where: { ownerId: userId },
-      select: { avatar: true },
-    });
 
-    // Upload vers Supabase
-    const { error } = await supabase.storage
-      .from("Wavely-Media")
-      .upload(filePath, file.buffer, {
+    const [previousAvatarResult, uploadResult] = await Promise.allSettled([
+      prisma.avatar.findUnique({
+        where: { ownerId: userId },
+        select: { avatar: true },
+      }),
+      supabase.storage.from("Wavely-Media").upload(filePath, file.buffer, {
         contentType: file.mimetype,
         upsert: true,
-      });
+      }),
+    ]);
 
-    if (error) {
+    if (uploadResult.status === "rejected") {
+      throw uploadResult.reason;
+    }
+
+    if (uploadResult.value.error) {
       return res.status(500).json({
-        message: error.message,
+        message: uploadResult.value.error.message,
       });
     }
+
+    if (previousAvatarResult.status === "rejected") {
+      const { error: cleanupError } = await supabase.storage
+        .from("Wavely-Media")
+        .remove([filePath]);
+      if (cleanupError) {
+        console.error(
+          "Failed to remove avatar after database lookup failed:",
+          cleanupError,
+        );
+      }
+      throw previousAvatarResult.reason;
+    }
+
+    const previousAvatar = previousAvatarResult.value;
 
     // Récupérer l'URL publique
     const { data: publicUrlData } = supabase.storage
@@ -54,22 +72,27 @@ const uploadAvatar = async (req, res) => {
     });
 
     const storagePathPrefix = "/storage/v1/object/public/Wavely-Media/";
-    const previousFilePaths = previousAvatars.flatMap(({ avatar }) => {
-      const prefixIndex = avatar?.indexOf(storagePathPrefix) ?? -1;
-      if (prefixIndex === -1) return [];
+    const previousAvatarUrl = previousAvatar?.avatar;
+    const prefixIndex = previousAvatarUrl?.indexOf(storagePathPrefix) ?? -1;
+    const previousFilePath =
+      prefixIndex === -1
+        ? null
+        : decodeURIComponent(
+            previousAvatarUrl.slice(prefixIndex + storagePathPrefix.length),
+          );
 
-      const previousFilePath = decodeURIComponent(
-        avatar.slice(prefixIndex + storagePathPrefix.length),
-      );
-      return previousFilePath === filePath ? [] : [previousFilePath];
-    });
-
-    if (previousFilePaths.length > 0) {
-      const { error: cleanupError } = await supabase.storage
+    if (previousFilePath && previousFilePath !== filePath) {
+      void supabase.storage
         .from("Wavely-Media")
-        .remove(previousFilePaths);
-
-      if (cleanupError) console.error(cleanupError);
+        .remove([previousFilePath])
+        .then(({ error: cleanupError }) => {
+          if (cleanupError) {
+            console.error("Failed to remove previous avatar:", cleanupError);
+          }
+        })
+        .catch((cleanupError) => {
+          console.error("Failed to remove previous avatar:", cleanupError);
+        });
     }
 
     return res.status(201).json({

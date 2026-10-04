@@ -1,10 +1,18 @@
 import { prisma } from "../db.js";
 
+const commentAuthorSelect = {
+  id: true,
+  name: true,
+  avatar: {
+    select: { avatar: true },
+  },
+};
+
 const commentaire = async (req, res) => {
   try {
     const { content } = req.body;
     const { postId } = req.params;
-    const { id, name } = req.user;
+    const { id } = req.user;
 
     if (!content || !content.trim()) {
       return res.status(400).json({ message: "there is no content to submit" });
@@ -25,10 +33,12 @@ const commentaire = async (req, res) => {
 
     const comment = await prisma.comment.create({
       data: {
-        authorName: name,
         content: content.trim(),
         postId: postId,
         authorId: id,
+      },
+      include: {
+        author: { select: commentAuthorSelect },
       },
     });
 
@@ -71,7 +81,6 @@ const updateCommentaire = async (req, res) => {
   try {
     const { content } = req.body;
     const userId = req.user.id;
-    const userName = req.user.name;
     const { id } = req.params;
 
     const comment = await prisma.comment.findUnique({
@@ -89,8 +98,10 @@ const updateCommentaire = async (req, res) => {
     const newPost = await prisma.comment.update({
       where: { id: id },
       data: {
-        authorName: userName,
         content,
+      },
+      include: {
+        author: { select: commentAuthorSelect },
       },
     });
 
@@ -108,7 +119,11 @@ const updateCommentaire = async (req, res) => {
 
 const allComment = async (req, res) => {
   try {
-    const allComm = await prisma.comment.findMany();
+    const allComm = await prisma.comment.findMany({
+      include: {
+        author: { select: commentAuthorSelect },
+      },
+    });
     res.status(200).json({
       status: "Succes",
       allComm,
