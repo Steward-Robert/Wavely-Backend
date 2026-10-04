@@ -14,6 +14,7 @@ import allUsers from "./routes/allUsers-route.js";
 import adminRouter from "./routes/admin-route.js";
 import reportRouter from "./routes/report-route.js";
 import SavedRoute from "./routes/savedRoute.js";
+import friendRouter from "./routes/friendsRouter.js";
 
 const app = express();
 const allowedOrigins = [
@@ -35,6 +36,7 @@ app.use(
 app.use(express.json());
 app.use(cookieParser());
 
+app.use("/api", friendRouter);
 app.use("/api/savedPost", SavedRoute);
 app.use("/api/auth", route);
 app.use("/api/post", postRouter);
