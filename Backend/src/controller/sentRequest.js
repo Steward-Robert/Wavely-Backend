@@ -3,7 +3,7 @@ import { prisma } from "../db.js";
 const sendRequest = async (req, res) => {
   try {
     const senderId = req.user.id;
-    const receiverId = req.params.id;
+    const receiverId = req.params.receiverId;
 
     const user = await prisma.user.findUnique({
       where: { id: senderId },
@@ -71,7 +71,7 @@ const sendRequest = async (req, res) => {
 
 const cancelSentRequest = async (req, res) => {
   const senderId = req.user.id;
-  const receiverId = req.params.id;
+  const receiverId = req.params.receiverId;
 
   try {
     await prisma.friendRequest.delete({
