@@ -133,31 +133,31 @@ const acceptRequest = async (req, res) => {
       });
     }
 
-    if (request.friendstatus !== "PENDING") {
-      return res.status(400).json({
-        message: "This request is no longer pending",
-      });
+    await prisma.friendship.create({
+      data: {
+        userId: receiverId,
+        friendId: request.senderId,
+      },
+    });
 
-      await prisma.friendship.create({
-        data: {
-          userId: receiverId,
-          friendId: request.senderId,
+    await prisma.friendRequest.delete({
+      where: {
+        senderId_receiverId: {
+          senderId: request.senderId,
+          receiverId,
         },
-      });
-
-      await prisma.friendRequest.delete({
-        where: {
-          senderId_receiverId: {
-            senderId: request.senderId,
-            receiverId,
-          },
-        },
-      });
-    }
+      },
+    });
 
     return res.status(201).json({
       message: "You're now friends",
     });
+
+    if (request.friendstatus !== "PENDING") {
+      return res.status(400).json({
+        message: "This request is no longer pending",
+      });
+    }
   } catch (error) {
     console.log(error.message);
     return res.status(500).json({

@@ -141,6 +141,8 @@ model Report {
   @@index([targetType, targetId])
 }
 
+
+
 enum ReportTargetType {
   PLATFORM
   USER
