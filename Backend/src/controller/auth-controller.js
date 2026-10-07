@@ -25,7 +25,7 @@ const registerUser = async (req, res) => {
         password: hashedPassword,
       },
     });
-    let token = await createToken(newUser.id, res);
+    await createToken(newUser.id, res);
     res.status(201).json({
       message: "User registered successfully",
       user: {
@@ -33,7 +33,6 @@ const registerUser = async (req, res) => {
         name: newUser.name,
         email: newUser.email,
       },
-      token,
     });
   } catch (error) {
     console.error(error);
@@ -57,11 +56,10 @@ const loginUser = async (req, res) => {
     if (!user.isActive) {
       return res.status(403).json({ message: "This account is deactivated." });
     }
-    let token = await createToken(user.id, res);
+    await createToken(user.id, res);
     res.json({
       message: "Login successful",
       data: { id: user.id, name: user.name, email: user.email },
-      token,
     });
   } catch (error) {
     console.error(error);
