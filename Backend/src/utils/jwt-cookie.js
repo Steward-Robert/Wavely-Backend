@@ -2,6 +2,7 @@ import jwt from "jsonwebtoken";
 
 const isProduction =
   process.env.NODE_ENV === "production" ||
+  process.env.MODE_ENV === "production" ||
   process.env.MODE_DEV === "production";
 
 const createToken = (userId, res) => {
@@ -15,6 +16,7 @@ const createToken = (userId, res) => {
     secure: isProduction,
     sameSite: isProduction ? "none" : "strict",
     maxAge: 7 * 24 * 60 * 60 * 1000,
+    path: "/",
   });
   return token;
 };

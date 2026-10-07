@@ -1,5 +1,6 @@
 import supabase from "./spabse.js";
 import { prisma } from "../db.js";
+import { getPostStoragePaths } from "../utils/post-storage.js";
 
 const pageOptions = (query) => {
   const page = Math.max(1, Number.parseInt(query.page, 10) || 1);
@@ -8,18 +9,6 @@ const pageOptions = (query) => {
     Math.max(10, Number.parseInt(query.limit, 10) || 25),
   );
   return { page, limit, skip: (page - 1) * limit };
-};
-
-const getStoragePath = (publicUrl, folder) => {
-  try {
-    const segments = new URL(publicUrl).pathname.split("/");
-    const folderIndex = segments.indexOf(folder);
-    return folderIndex < 0
-      ? null
-      : segments.slice(folderIndex).map(decodeURIComponent).join("/");
-  } catch {
-    return null;
-  }
 };
 
 const adminOverview = async (_req, res) => {
@@ -216,6 +205,9 @@ const adminPosts = async (req, res) => {
             },
           },
           _count: { select: { comments: true, likes: true } },
+          media: {
+            select: { id: true, url: true, mediaType: true },
+          },
         },
         orderBy: { createdAt: "desc" },
         skip,
@@ -236,9 +228,25 @@ const adminPosts = async (req, res) => {
 const deleteAdminPost = async (req, res) => {
   try {
     const { postId } = req.params;
-    const post = await prisma.post.findUnique({ where: { id: postId } });
+    const post = await prisma.post.findUnique({
+      where: { id: postId },
+      include: { media: { select: { url: true } } },
+    });
     if (!post) {
       return res.status(404).json({ message: "Post not found" });
+    }
+
+    const storagePaths = getPostStoragePaths(post);
+    if (storagePaths.length > 0) {
+      const { error: storageError } = await supabase.storage
+        .from("Wavely-Media")
+        .remove(storagePaths);
+      if (storageError) {
+        console.error("Could not remove post media from storage:", storageError);
+        return res.status(500).json({
+          message: "Could not delete the post media. Please try again.",
+        });
+      }
     }
 
     await prisma.$transaction([
@@ -246,16 +254,6 @@ const deleteAdminPost = async (req, res) => {
       prisma.like.deleteMany({ where: { postId } }),
       prisma.post.delete({ where: { id: postId } }),
     ]);
-
-    if (post.image) {
-      const imagePath = getStoragePath(post.image, "Posts");
-      if (imagePath) {
-        const { error } = await supabase.storage
-          .from("Wavely-Media")
-          .remove([imagePath]);
-        if (error) console.error(error);
-      }
-    }
 
     return res.status(200).json({ message: "Post deleted successfully" });
   } catch (error) {

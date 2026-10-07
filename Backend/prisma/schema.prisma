@@ -99,6 +99,17 @@ model Post {
   likes     Like[]
   author    User      @relation(fields: [authorId], references: [id])
   save Saved[]
+  media     PostMedia[]
+}
+
+model PostMedia {
+  id        String   @id @default(uuid())
+  url       String
+  mediaType String
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
 }
 
 model Comment {

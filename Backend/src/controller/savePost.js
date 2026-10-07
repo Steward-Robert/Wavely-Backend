@@ -102,6 +102,9 @@ const getSavedPosts = async (req, res) => {
             author: true,
             comments: true,
             likes: true,
+            media: {
+              select: { id: true, url: true, mediaType: true },
+            },
           },
         },
       },

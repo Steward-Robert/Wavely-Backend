@@ -53,6 +53,11 @@ const getUserInfo = async (req, res) => {
           orderBy: {
             createdAt: "desc",
           },
+          include: {
+            media: {
+              select: { id: true, url: true, mediaType: true },
+            },
+          },
         },
 
         _count: {

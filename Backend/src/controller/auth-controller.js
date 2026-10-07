@@ -4,6 +4,7 @@ import createToken from "../utils/jwt-cookie.js";
 
 const isProduction =
   process.env.NODE_ENV === "production" ||
+  process.env.MODE_ENV === "production" ||
   process.env.MODE_DEV === "production";
 
 const registerUser = async (req, res) => {
