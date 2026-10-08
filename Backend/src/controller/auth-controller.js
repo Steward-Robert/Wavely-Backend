@@ -1,6 +1,7 @@
 import { prisma } from "../db.js";
 import bcrypt from "bcrypt";
 import createToken from "../utils/jwt-cookie.js";
+import { deleteUserAccount } from "../utils/delete-user-account.js";
 
 const isProduction =
   process.env.NODE_ENV === "production" ||
@@ -80,28 +81,38 @@ const logout = async (req, res) => {
 
 const deleteAccount = async (req, res) => {
   try {
-    const id = req.user.id;
-
     const user = await prisma.user.findUnique({
-      where: { id: id },
+      where: { id: req.user.id },
+      select: { id: true, role: true, isActive: true },
     });
-
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
 
-    if (id !== user.id) {
-      return res.status(401).json({ message: "Acces denied" });
+    if (user.role === "ADMIN" && user.isActive) {
+      const activeAdmins = await prisma.user.count({
+        where: { role: "ADMIN", isActive: true },
+      });
+      if (activeAdmins <= 1) {
+        return res.status(400).json({
+          message: "The last active admin account cannot be deleted.",
+        });
+      }
     }
 
-    await prisma.user.delete({
-      where: { id: id },
+    await deleteUserAccount(user.id);
+    res.clearCookie("jwt", {
+      httpOnly: true,
+      secure: true,
+      sameSite: "none",
+      path: "/",
     });
-
-    res.status(200).json({ message: "Account deleted succesfully" });
+    return res.status(200).json({ message: "Account deleted successfully" });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Internal server error" });
+    return res.status(500).json({
+      message: error.message || "Unable to delete account",
+    });
   }
 };
 

@@ -6,6 +6,7 @@ import {
   adminPosts,
   adminReports,
   adminUsers,
+  deleteAdminUser,
   deleteAdminComment,
   deleteAdminPost,
   updateReportStatus,
@@ -20,6 +21,7 @@ adminRouter.use(authentification, requireAdmin);
 adminRouter.get("/overview", adminOverview);
 adminRouter.get("/users", adminUsers);
 adminRouter.patch("/users/:userId/status", updateUserStatus);
+adminRouter.delete("/users/:userId", deleteAdminUser);
 adminRouter.get("/posts/authors", adminPostAuthors);
 adminRouter.get("/posts", adminPosts);
 adminRouter.delete("/posts/:postId", deleteAdminPost);

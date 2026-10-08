@@ -1,6 +1,7 @@
 import supabase from "./spabse.js";
 import { prisma } from "../db.js";
 import { getPostStoragePaths } from "../utils/post-storage.js";
+import { deleteUserAccount } from "../utils/delete-user-account.js";
 
 const pageOptions = (query) => {
   const page = Math.max(1, Number.parseInt(query.page, 10) || 1);
@@ -148,6 +149,46 @@ const updateUserStatus = async (req, res) => {
   }
 };
 
+const deleteAdminUser = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    if (userId === req.user.id) {
+      return res.status(400).json({
+        message: "Use account settings to delete your own account.",
+      });
+    }
+
+    const targetUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, role: true, isActive: true },
+    });
+    if (!targetUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (targetUser.role === "ADMIN" && targetUser.isActive) {
+      const activeAdmins = await prisma.user.count({
+        where: { role: "ADMIN", isActive: true },
+      });
+      if (activeAdmins <= 1) {
+        return res.status(400).json({
+          message: "The last active admin account cannot be deleted.",
+        });
+      }
+    }
+
+    await deleteUserAccount(userId);
+    return res
+      .status(200)
+      .json({ message: "User account deleted successfully" });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      message: error.message || "Unable to delete user account",
+    });
+  }
+};
+
 const adminPostAuthors = async (req, res) => {
   try {
     const { page, limit, skip } = pageOptions(req.query);
@@ -242,7 +283,10 @@ const deleteAdminPost = async (req, res) => {
         .from("Wavely-Media")
         .remove(storagePaths);
       if (storageError) {
-        console.error("Could not remove post media from storage:", storageError);
+        console.error(
+          "Could not remove post media from storage:",
+          storageError,
+        );
         return res.status(500).json({
           message: "Could not delete the post media. Please try again.",
         });
@@ -368,6 +412,7 @@ const updateReportStatus = async (req, res) => {
 export {
   adminOverview,
   adminUsers,
+  deleteAdminUser,
   updateUserStatus,
   adminPostAuthors,
   adminPosts,
