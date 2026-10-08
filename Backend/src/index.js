@@ -17,23 +17,27 @@ import SavedRoute from "./routes/savedRoute.js";
 import friendRouter from "./routes/friendsRouter.js";
 
 const app = express();
-const allowedOrigins = [
+const allowedOrigins = new Set([
   "https://wavely-bnob.onrender.com",
   "http://localhost:5173",
   "http://127.0.0.1:5173",
-];
+  ...(process.env.FRONTEND_ORIGINS || "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean),
+]);
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (!origin || allowedOrigins.has(origin)) {
         callback(null, true);
       } else {
         callback(new Error("Not allowed by CORS"));
       }
     },
     credentials: true,
-  })
+  }),
 );
 
 app.use(express.json());
