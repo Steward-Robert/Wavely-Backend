@@ -17,6 +17,13 @@ import SavedRoute from "./routes/savedRoute.js";
 import friendRouter from "./routes/friendsRouter.js";
 
 const app = express();
+
+// =========================================================================
+// CORRECTION : Trust Proxy pour Render
+// Permet à Express de reconnaître le HTTPS envoyé par le proxy inverse Render
+// =========================================================================
+app.set("trust proxy", 1);
+
 const allowedOrigins = new Set([
   "https://wavely-bnob.onrender.com",
   "http://localhost:5173",
