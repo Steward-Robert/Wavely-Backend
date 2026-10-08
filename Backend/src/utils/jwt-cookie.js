@@ -9,11 +9,13 @@ const createToken = (userId, res) => {
     }
   );
 
+  const isProduction = process.env.NODE_ENV === "production" || process.env.RENDER === "true";
+
   res.cookie("jwt", token, {
     httpOnly: true,
-    secure: true,
-    sameSite: "none",
-    maxAge: 7 * 24 * 60 * 60 * 1000,
+    secure: isProduction, // Activé si sur Render / en production
+    sameSite: isProduction ? "none" : "lax", // 'none' pour le cross-domain sur HTTPS
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 jours
     path: "/",
   });
 };
