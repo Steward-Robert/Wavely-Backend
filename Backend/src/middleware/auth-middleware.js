@@ -1,8 +1,18 @@
 import jwt from "jsonwebtoken";
+import { randomUUID } from "node:crypto";
 import { prisma } from "../db.js";
 
 export const authentification = async (req, res, next) => {
   try {
+    console.log("JWT cookie diagnostics:", {
+      requestId: req.id ?? randomUUID(),
+      method: req.method,
+      path: req.path,
+      hasRawCookieHeader: Boolean(req.headers.cookie),
+      hasParsedCookies: req.cookies !== undefined && req.cookies !== null,
+      parsedCookieKeys: Object.keys(req.cookies ?? {}),
+      hasJwtCookie: Boolean(req.cookies?.jwt),
+    });
     const token = req.cookies?.jwt;
 
     if (!token) {
