@@ -26,6 +26,7 @@ app.set("trust proxy", 1);
 
 const allowedOrigins = new Set([
   "https://wavely-bnob.onrender.com",
+  "https://wavely-i35s7c5tc-ward22.vercel.app",
   "http://localhost:5173",
   "http://127.0.0.1:5173",
   ...(process.env.FRONTEND_ORIGINS || "")
@@ -37,6 +38,7 @@ const allowedOrigins = new Set([
 app.use(
   cors({
     origin: (origin, callback) => {
+      console.log("CORS origin received:", origin);
       if (!origin || allowedOrigins.has(origin)) {
         callback(null, true);
       } else {
