@@ -7,11 +7,14 @@ import {
   acceptRequest,
   getSentRequests,
   getReceivedRequests,
+  deleteFriend,
 } from "../controller/sentRequest.js";
 
 import { authentification } from "../middleware/auth-middleware.js";
 
 const friendRouter = Router();
+
+friendRouter.delete("/deleteFr/:id", authentification, deleteFriend);
 
 friendRouter.post("/sendRequest/:receiverId", authentification, sendRequest);
 

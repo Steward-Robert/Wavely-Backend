@@ -43,8 +43,7 @@ const uploadPost = async (req, res) => {
 
     let firstMediaUrl = null;
     for (const file of files) {
-      const fileName = `${randomUUID()}-${file.originalname}`;
-      const storagePath = `Posts/${fileName}`;
+      const storagePath = `Posts/${randomUUID()}`;
 
       const { error: uploadError } = await supabase.storage
         .from("Wavely-Media")

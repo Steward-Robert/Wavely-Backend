@@ -181,9 +181,33 @@ const allFriend = async (req, res) => {
 
       return friendship.user;
     });
-
     return res.status(200).json({
       friends,
+    });
+  } catch (error) {
+    console.log(error.message);
+    return res.status(500).json({
+      message: "Internal error",
+    });
+  }
+};
+
+const deleteFriend = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const friendId = req.params.id;
+
+    await prisma.delete({
+      where: {
+        userId_friendId: {
+          userId,
+          friendId,
+        },
+      },
+    });
+
+    return res.status(200).json({
+      message: "You're now not friend with this user anymore",
     });
   } catch (error) {
     console.log(error.message);
@@ -260,4 +284,5 @@ export {
   allFriend,
   getSentRequests,
   getReceivedRequests,
+  deleteFriend,
 };
