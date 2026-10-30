@@ -1,8 +1,29 @@
 import supabase from "./spabse.js";
 import { prisma } from "../db.js";
 import { randomUUID } from "node:crypto";
+import { findVisibleStories, findVisibleStory } from "../utils/story-access.js";
+import {
+  ensurePrivateStoryBucket,
+  getStoryStorageLocation,
+  getStoryStorageReference,
+  PRIVATE_STORY_BUCKET,
+} from "../utils/story-storage.js";
 
 const STORY_LIFETIME_MS = 24 * 60 * 60 * 1000;
+
+const getStoryResponse = (story) => {
+  const { image, ...storyData } = story;
+  const storageLocation = getStoryStorageLocation(image);
+  const isVideo = /\.(mp4|webm|ogg)(\?|$)/i.test(storageLocation?.path ?? "");
+
+  return {
+    ...storyData,
+    mediaType: storageLocation ? (isVideo ? "video" : "image") : null,
+    mediaUrl: storageLocation
+      ? `/api/story/${encodeURIComponent(story.id)}/media`
+      : null,
+  };
+};
 
 const uploadStory = async (req, res) => {
   try {
@@ -21,11 +42,13 @@ const uploadStory = async (req, res) => {
     }
 
     const uploadedStories = [];
+    await ensurePrivateStoryBucket(supabase.storage);
     for (const file of files) {
       const fileName = `${randomUUID()}-${file.originalname}`;
+      const imagePath = `Stories/${fileName}`;
       const { error: uploadError } = await supabase.storage
-        .from("Wavely-Media")
-        .upload(`Stories/${fileName}`, file.buffer, {
+        .from(PRIVATE_STORY_BUCKET)
+        .upload(imagePath, file.buffer, {
           contentType: file.mimetype,
         });
 
@@ -36,14 +59,11 @@ const uploadStory = async (req, res) => {
         });
       }
 
-      const { data: publicData } = supabase.storage
-        .from("Wavely-Media")
-        .getPublicUrl(`Stories/${fileName}`);
       const createdAt = new Date();
       const story = await prisma.story.create({
         data: {
           content,
-          image: publicData.publicUrl,
+          image: getStoryStorageReference(imagePath),
           authorId: id,
           createdAt,
           expiresAt: new Date(createdAt.getTime() + STORY_LIFETIME_MS),
@@ -54,7 +74,7 @@ const uploadStory = async (req, res) => {
 
     return res.status(201).json({
       message: "Stories uploaded successfully",
-      stories: uploadedStories,
+      stories: uploadedStories.map(getStoryResponse),
     });
   } catch (error) {
     console.error(error);
@@ -65,18 +85,66 @@ const uploadStory = async (req, res) => {
   }
 };
 
-const allStories = async (_req, res) => {
+const allStories = async (req, res) => {
   try {
-    const stories = await prisma.story.findMany({
-      where: { expiresAt: { gt: new Date() } },
-      include: { author: { select: { id: true, name: true } } },
-      orderBy: { createdAt: "desc" },
-    });
+    const stories = await findVisibleStories(prisma, req.user.id);
 
-    return res.status(200).json({ stories });
+    return res.status(200).json({ stories: stories.map(getStoryResponse) });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: "Server error" });
+  }
+};
+
+const getStory = async (req, res) => {
+  try {
+    const story = await findVisibleStory(prisma, req.params.storyId, req.user.id);
+    if (!story) {
+      return res.status(404).json({ message: "Story not found" });
+    }
+
+    return res.status(200).json({ story: getStoryResponse(story) });
+  } catch (error) {
+    console.error("Error fetching story:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+const getStoryMedia = async (req, res) => {
+  try {
+    const story = await findVisibleStory(prisma, req.params.storyId, req.user.id);
+    if (!story) {
+      return res.status(404).json({ message: "Story not found" });
+    }
+
+    const storageLocation = getStoryStorageLocation(story.image);
+    if (!storageLocation) {
+      return res.status(404).json({ message: "Story media not found" });
+    }
+
+    const { data, error } = await supabase.storage
+      .from(storageLocation.bucket)
+      .download(storageLocation.path);
+    if (error || !data) {
+      if (error?.statusCode === "404" || error?.statusCode === 404) {
+        return res.status(404).json({ message: "Story media not found" });
+      }
+      console.error("Error downloading story media:", error);
+      return res.status(500).json({ message: "Could not load story media" });
+    }
+
+    const media = Buffer.from(await data.arrayBuffer());
+    res.set({
+      "Cache-Control": "private, no-store",
+      "Content-Security-Policy": "sandbox; default-src 'none'",
+      "Content-Length": String(media.length),
+      "Content-Type": data.type || "application/octet-stream",
+      "X-Content-Type-Options": "nosniff",
+    });
+    return res.status(200).send(media);
+  } catch (error) {
+    console.error("Error fetching story media:", error);
+    return res.status(500).json({ message: "Could not load story media" });
   }
 };
 
@@ -105,11 +173,11 @@ const deleteStory = async (req, res) => {
     await prisma.story.delete({ where: { id: storyId } });
 
     if (story.image) {
-      const imagePath = getStoragePath(story.image, "Stories");
-      if (imagePath) {
+      const storageLocation = getStoryStorageLocation(story.image);
+      if (storageLocation) {
         const { error } = await supabase.storage
-          .from("Wavely-Media")
-          .remove([imagePath]);
+          .from(storageLocation.bucket)
+          .remove([storageLocation.path]);
         if (error) console.error(error);
       }
     }
@@ -118,18 +186,6 @@ const deleteStory = async (req, res) => {
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: "Server error" });
-  }
-};
-
-const getStoragePath = (publicUrl, folder) => {
-  try {
-    const segments = new URL(publicUrl).pathname.split("/");
-    const folderIndex = segments.indexOf(folder);
-    return folderIndex < 0
-      ? null
-      : segments.slice(folderIndex).map(decodeURIComponent).join("/");
-  } catch {
-    return null;
   }
 };
 
@@ -145,4 +201,11 @@ const cleanupExpiredStories = async () => {
   return count;
 };
 
-export { uploadStory, allStories, deleteStory, cleanupExpiredStories };
+export {
+  uploadStory,
+  allStories,
+  getStory,
+  getStoryMedia,
+  deleteStory,
+  cleanupExpiredStories,
+};

@@ -1,6 +1,11 @@
 import supabase from "../controller/spabse.js";
 import { prisma } from "../db.js";
 import { getPostStoragePaths } from "./post-storage.js";
+import {
+  getStoryStorageLocation,
+  LEGACY_STORY_BUCKET,
+  PRIVATE_STORY_BUCKET,
+} from "./story-storage.js";
 
 const getStoragePath = (publicUrl, folder) => {
   try {
@@ -34,22 +39,47 @@ export const deleteUserAccount = async (userId) => {
   if (!user) return false;
 
   const postIds = user.posts.map((post) => post.id);
-  const storagePaths = [
-    ...user.posts.flatMap(getPostStoragePaths),
-    ...user.stories.map((story) => getStoragePath(story.image, "Stories")),
-    getStoragePath(user.avatar?.avatar, "Avatars"),
-    ...user.reportsFiled.map((report) =>
-      getStoragePath(report.attachmentUrl, "Reports"),
-    ),
-  ].filter(Boolean);
+  const storagePathsByBucket = new Map([
+    [LEGACY_STORY_BUCKET, []],
+    [PRIVATE_STORY_BUCKET, []],
+  ]);
+  const addStoragePath = (bucket, path) => {
+    if (!path) return;
+    if (!storagePathsByBucket.has(bucket)) {
+      storagePathsByBucket.set(bucket, []);
+    }
+    storagePathsByBucket.get(bucket).push(path);
+  };
 
-  for (let index = 0; index < storagePaths.length; index += 100) {
-    const { error } = await supabase.storage
-      .from("Wavely-Media")
-      .remove(storagePaths.slice(index, index + 100));
-    if (error) {
-      console.error("Could not remove account media from storage:", error);
-      throw new Error("Account media could not be deleted. Please try again.");
+  for (const post of user.posts) {
+    for (const path of getPostStoragePaths(post)) {
+      addStoragePath(LEGACY_STORY_BUCKET, path);
+    }
+  }
+  for (const story of user.stories) {
+    const location = getStoryStorageLocation(story.image);
+    if (location) addStoragePath(location.bucket, location.path);
+  }
+  addStoragePath(
+    LEGACY_STORY_BUCKET,
+    getStoragePath(user.avatar?.avatar, "Avatars"),
+  );
+  for (const report of user.reportsFiled) {
+    addStoragePath(
+      LEGACY_STORY_BUCKET,
+      getStoragePath(report.attachmentUrl, "Reports"),
+    );
+  }
+
+  for (const [bucket, storagePaths] of storagePathsByBucket) {
+    for (let index = 0; index < storagePaths.length; index += 100) {
+      const { error } = await supabase.storage
+        .from(bucket)
+        .remove(storagePaths.slice(index, index + 100));
+      if (error) {
+        console.error("Could not remove account media from storage:", error);
+        throw new Error("Account media could not be deleted. Please try again.");
+      }
     }
   }
 

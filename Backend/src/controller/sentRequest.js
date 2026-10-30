@@ -197,12 +197,12 @@ const deleteFriend = async (req, res) => {
     const userId = req.user.id;
     const friendId = req.params.id;
 
-    await prisma.delete({
+    await prisma.friendship.deleteMany({
       where: {
-        userId_friendId: {
-          userId,
-          friendId,
-        },
+        OR: [
+          { userId, friendId },
+          { userId: friendId, friendId: userId },
+        ],
       },
     });
 
