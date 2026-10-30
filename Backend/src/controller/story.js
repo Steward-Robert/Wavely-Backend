@@ -2,6 +2,8 @@ import supabase from "./spabse.js";
 import { prisma } from "../db.js";
 import { randomUUID } from "node:crypto";
 
+const STORY_LIFETIME_MS = 24 * 60 * 60 * 1000;
+
 const uploadStory = async (req, res) => {
   try {
     const files = req.files;
@@ -37,8 +39,15 @@ const uploadStory = async (req, res) => {
       const { data: publicData } = supabase.storage
         .from("Wavely-Media")
         .getPublicUrl(`Stories/${fileName}`);
+      const createdAt = new Date();
       const story = await prisma.story.create({
-        data: { content, image: publicData.publicUrl, authorId: id },
+        data: {
+          content,
+          image: publicData.publicUrl,
+          authorId: id,
+          createdAt,
+          expiresAt: new Date(createdAt.getTime() + STORY_LIFETIME_MS),
+        },
       });
       uploadedStories.push(story);
     }
@@ -59,6 +68,7 @@ const uploadStory = async (req, res) => {
 const allStories = async (_req, res) => {
   try {
     const stories = await prisma.story.findMany({
+      where: { expiresAt: { gt: new Date() } },
       include: { author: { select: { id: true, name: true } } },
       orderBy: { createdAt: "desc" },
     });
@@ -79,7 +89,12 @@ const deleteStory = async (req, res) => {
       return res.status(401).json({ message: "You need to be connected" });
     }
 
-    const story = await prisma.story.findUnique({ where: { id: storyId } });
+    const story = await prisma.story.findFirst({
+      where: {
+        id: storyId,
+        expiresAt: { gt: new Date() },
+      },
+    });
     if (!story) {
       return res.status(404).json({ message: "Story not found" });
     }
@@ -118,4 +133,16 @@ const getStoragePath = (publicUrl, folder) => {
   }
 };
 
-export { uploadStory, allStories, deleteStory };
+const cleanupExpiredStories = async () => {
+  const { count } = await prisma.story.deleteMany({
+    where: { expiresAt: { lte: new Date() } },
+  });
+
+  if (count > 0) {
+    console.info(`Removed ${count} expired stories`);
+  }
+
+  return count;
+};
+
+export { uploadStory, allStories, deleteStory, cleanupExpiredStories };

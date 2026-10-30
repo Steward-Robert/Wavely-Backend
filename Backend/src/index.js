@@ -15,6 +15,9 @@ import adminRouter from "./routes/admin-route.js";
 import reportRouter from "./routes/report-route.js";
 import SavedRoute from "./routes/savedRoute.js";
 import friendRouter from "./routes/friendsRouter.js";
+import { cleanupExpiredStories } from "./controller/story.js";
+
+const STORY_CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
 
 const app = express();
 
@@ -71,3 +74,24 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
+
+let storyCleanupInProgress = false;
+const runStoryCleanup = async () => {
+  if (storyCleanupInProgress) return;
+  storyCleanupInProgress = true;
+
+  try {
+    await cleanupExpiredStories();
+  } catch (error) {
+    console.error("Failed to clean up expired stories:", error);
+  } finally {
+    storyCleanupInProgress = false;
+  }
+};
+
+void runStoryCleanup();
+const storyCleanupInterval = setInterval(
+  runStoryCleanup,
+  STORY_CLEANUP_INTERVAL_MS,
+);
+storyCleanupInterval.unref();

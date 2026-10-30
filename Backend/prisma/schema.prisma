@@ -83,7 +83,10 @@ model Story {
   image     String?
   authorId  String
   createdAt DateTime @default(now())
+  expiresAt DateTime
   author    User     @relation(fields: [authorId], references: [id] , onDelete: Cascade)
+
+  @@index([expiresAt])
 }
 
 model Post {
