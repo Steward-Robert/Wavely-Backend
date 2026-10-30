@@ -1,4 +1,5 @@
 import express from "express";
+import { createServer } from "node:http";
 import cors from "cors";
 import "dotenv/config";
 import cookieParser from "cookie-parser";
@@ -16,6 +17,8 @@ import reportRouter from "./routes/report-route.js";
 import SavedRoute from "./routes/savedRoute.js";
 import friendRouter from "./routes/friendsRouter.js";
 import { cleanupExpiredStories } from "./controller/story.js";
+import chatRouter from "./routes/chat-route.js";
+import { createChatSocketServer } from "./realtime/chat-socket.js";
 
 const STORY_CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -57,6 +60,7 @@ app.use(express.json());
 app.use(cookieParser());
 
 app.use("/api", friendRouter);
+app.use("/api/chat", chatRouter);
 app.use("/api/savedPost", SavedRoute);
 app.use("/api/auth", route);
 app.use("/api/post", postRouter);
@@ -70,8 +74,11 @@ app.use("/api", infoRouter);
 app.use("/api", allUsers);
 
 const PORT = process.env.PORT || 3000;
+const httpServer = createServer(app);
+const io = createChatSocketServer(httpServer, [...allowedOrigins]);
+app.set("io", io);
 
-app.listen(PORT, () => {
+httpServer.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
 

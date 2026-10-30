@@ -28,6 +28,9 @@ model User {
   friendshipsReceived Friendship[]    @relation("FriendFriendships")
   sentFriendRequests  FriendRequest[] @relation("sentFriendRequest")
   receivedFriendRequests FriendRequest[] @relation("receivedFriendRequest")
+  conversationsAsUserOne Conversation[] @relation("ConversationUserOne")
+  conversationsAsUserTwo Conversation[] @relation("ConversationUserTwo")
+  messagesSent Message[]
 }
 
 model Avatar {
@@ -62,6 +65,38 @@ model FriendRequest {
   receiver User @relation("receivedFriendRequest", fields: [receiverId], references: [id])
 
   @@unique([senderId, receiverId])
+}
+
+model Conversation {
+  id        String   @id @default(uuid())
+  userOneId String
+  userTwoId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userOne  User      @relation("ConversationUserOne", fields: [userOneId], references: [id], onDelete: Cascade)
+  userTwo  User      @relation("ConversationUserTwo", fields: [userTwoId], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  @@unique([userOneId, userTwoId])
+  @@index([userOneId, updatedAt])
+  @@index([userTwoId, updatedAt])
+}
+
+model Message {
+  id                  String       @id @default(uuid())
+  conversationId      String
+  senderId            String
+  content             String?      @db.Text
+  attachmentPath      String?
+  attachmentMimeType  String?
+  attachmentName      String?
+  createdAt           DateTime     @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
 }
 
 

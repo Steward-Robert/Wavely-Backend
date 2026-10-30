@@ -197,7 +197,7 @@ const deleteFriend = async (req, res) => {
     const userId = req.user.id;
     const friendId = req.params.id;
 
-    await prisma.friendship.deleteMany({
+    const result = await prisma.friendship.deleteMany({
       where: {
         OR: [
           { userId, friendId },
@@ -205,6 +205,13 @@ const deleteFriend = async (req, res) => {
         ],
       },
     });
+
+    if (result.count > 0) {
+      req.app
+        .get("io")
+        ?.to([`user:${userId}`, `user:${friendId}`])
+        .emit("chat:friendship-removed", { friendId, userId });
+    }
 
     return res.status(200).json({
       message: "You're now not friend with this user anymore",

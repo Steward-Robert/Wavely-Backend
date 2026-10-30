@@ -6,6 +6,7 @@ import {
   LEGACY_STORY_BUCKET,
   PRIVATE_STORY_BUCKET,
 } from "./story-storage.js";
+import { PRIVATE_MESSAGE_BUCKET } from "./message-storage.js";
 
 const getStoragePath = (publicUrl, folder) => {
   try {
@@ -33,6 +34,20 @@ export const deleteUserAccount = async (userId) => {
       },
       stories: { select: { image: true } },
       reportsFiled: { select: { attachmentUrl: true } },
+      conversationsAsUserOne: {
+        select: {
+          messages: {
+            select: { attachmentPath: true },
+          },
+        },
+      },
+      conversationsAsUserTwo: {
+        select: {
+          messages: {
+            select: { attachmentPath: true },
+          },
+        },
+      },
     },
   });
 
@@ -69,6 +84,14 @@ export const deleteUserAccount = async (userId) => {
       LEGACY_STORY_BUCKET,
       getStoragePath(report.attachmentUrl, "Reports"),
     );
+  }
+  for (const conversation of [
+    ...user.conversationsAsUserOne,
+    ...user.conversationsAsUserTwo,
+  ]) {
+    for (const message of conversation.messages) {
+      addStoragePath(PRIVATE_MESSAGE_BUCKET, message.attachmentPath);
+    }
   }
 
   for (const [bucket, storagePaths] of storagePathsByBucket) {
