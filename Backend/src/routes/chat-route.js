@@ -5,6 +5,7 @@ import {
   allConversations,
   conversationMessages,
   createConversation,
+  getChatSocketToken,
   getMessageMedia,
   requireConversationAccess,
   sendMessage,
@@ -14,6 +15,7 @@ import {
 const chatRouter = Router();
 
 chatRouter.use(authentification);
+chatRouter.get("/socket-token", getChatSocketToken);
 chatRouter.get("/friends", allChatFriends);
 chatRouter.get("/conversations", allConversations);
 chatRouter.post("/conversations", createConversation);

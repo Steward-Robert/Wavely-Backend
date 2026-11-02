@@ -31,8 +31,15 @@ attachment upload, it creates the private `wavely-messages` bucket if needed;
 uploads fail if that bucket exists as public. Attachments are limited to one
 10 MB JPEG, PNG, WebP, MP4, WebM, or PDF file per message.
 
-Socket.IO authenticates the existing HTTP-only `jwt` cookie and allows the same
-frontend origins as the REST API. The frontend connects directly to the backend
-origin; set `VITE_SOCKET_URL` to that origin when it differs from the configured
-API server. Message content and media are persisted through the authenticated
-REST API; Socket.IO distributes committed messages to connected participants.
+The HTTP-only `jwt` cookie remains the source of authentication. The
+cookie-protected `GET /api/chat/socket-token` endpoint issues a chat-only token
+that expires after 60 seconds so the frontend can authenticate its direct
+Socket.IO connection even when REST requests are proxied through Vercel. The
+live connection remains bounded by the original session JWT expiration.
+Socket connections allow the same frontend origins as the REST API. Configure
+`FRONTEND_ORIGINS` with the deployed frontend origin when it is not already in
+the allowlist, and set `VITE_SOCKET_URL` to the backend origin when it differs
+from the configured API server. Conversation rooms are joined only after the
+server confirms conversation membership and an active accepted friendship.
+Message content and media are persisted through the authenticated REST API;
+Socket.IO distributes committed messages to connected participants.

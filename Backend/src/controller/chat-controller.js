@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import jwt from "jsonwebtoken";
 import multer from "multer";
 import supabase from "./spabse.js";
 import { prisma } from "../db.js";
@@ -17,6 +18,8 @@ import {
 
 const MAX_MESSAGE_LENGTH = 2000;
 const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024;
+const CHAT_SOCKET_TOKEN_AUDIENCE = "wavely-chat-socket";
+const CHAT_SOCKET_TOKEN_TTL_SECONDS = 60;
 const ALLOWED_ATTACHMENT_TYPES = new Set([
   "image/jpeg",
   "image/png",
@@ -36,6 +39,48 @@ const messageUpload = multer({
     callback(null, true);
   },
 });
+
+export const getChatSocketToken = (req, res) => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    console.error("Could not issue chat socket token: JWT_SECRET is missing.");
+    return res
+      .status(500)
+      .json({ message: "Unable to initialize real-time chat." });
+  }
+
+  let session;
+  try {
+    session = jwt.verify(req.cookies?.jwt, secret);
+  } catch {
+    return res.status(401).json({ message: "Authentication required." });
+  }
+  if (
+    typeof session !== "object" ||
+    session.id !== req.user.id ||
+    typeof session.exp !== "number" ||
+    session.exp <= Math.floor(Date.now() / 1000)
+  ) {
+    return res.status(401).json({ message: "Authentication required." });
+  }
+
+  const token = jwt.sign(
+    {
+      id: req.user.id,
+      purpose: "chat-socket",
+      sessionExp: session.exp,
+    },
+    secret,
+    {
+      audience: CHAT_SOCKET_TOKEN_AUDIENCE,
+      expiresIn: CHAT_SOCKET_TOKEN_TTL_SECONDS,
+    },
+  );
+  return res.status(200).json({
+    token,
+    expiresIn: CHAT_SOCKET_TOKEN_TTL_SECONDS,
+  });
+};
 
 export const uploadMessageAttachment = (req, res, next) => {
   messageUpload.single("attachment")(req, res, (error) => {
@@ -340,7 +385,11 @@ export const sendMessage = async (req, res) => {
       if (friendshipStillAccepted) {
         req.app
           .get("io")
-          ?.to([`user:${req.user.id}`, `user:${req.chatPeerId}`])
+          ?.to([
+            `conversation:${req.chatConversation.id}`,
+            `user:${req.user.id}`,
+            `user:${req.chatPeerId}`,
+          ])
           .emit("chat:message", responseMessage);
       }
     } catch (error) {
