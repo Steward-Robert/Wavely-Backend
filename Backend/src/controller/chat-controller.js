@@ -133,10 +133,20 @@ export const requireConversationAccess = async (req, res, next) => {
 
 const conversationIncludes = {
   userOne: {
-    select: { id: true, name: true, avatar: { select: { avatar: true } } },
+    select: {
+      id: true,
+      name: true,
+      lastSeenAt: true,
+      avatar: { select: { avatar: true } },
+    },
   },
   userTwo: {
-    select: { id: true, name: true, avatar: { select: { avatar: true } } },
+    select: {
+      id: true,
+      name: true,
+      lastSeenAt: true,
+      avatar: { select: { avatar: true } },
+    },
   },
   messages: {
     take: 1,
@@ -163,6 +173,7 @@ export const allChatFriends = async (req, res) => {
           select: {
             id: true,
             name: true,
+            lastSeenAt: true,
             isActive: true,
             avatar: { select: { avatar: true } },
           },
@@ -171,6 +182,7 @@ export const allChatFriends = async (req, res) => {
           select: {
             id: true,
             name: true,
+            lastSeenAt: true,
             isActive: true,
             avatar: { select: { avatar: true } },
           },
@@ -300,14 +312,71 @@ export const conversationMessages = async (req, res) => {
       orderBy: { createdAt: "desc" },
       take: 50,
     });
+    const undeliveredMessageIds = messages
+      .filter(
+        (message) =>
+          message.senderId === req.chatPeerId && !message.deliveredAt,
+      )
+      .map((message) => message.id);
+    const deliveryAt = new Date();
+    if (undeliveredMessageIds.length > 0) {
+      await prisma.message.updateMany({
+        where: { id: { in: undeliveredMessageIds }, deliveredAt: null },
+        data: { deliveredAt: deliveryAt },
+      });
+    }
+
+    if (undeliveredMessageIds.length > 0) {
+      try {
+        req.app
+          .get("io")
+          ?.to(`user:${req.chatPeerId}`)
+          .emit("chat:message-status", {
+            conversationId: req.chatConversation.id,
+            messageIds: undeliveredMessageIds,
+            deliveredAt: deliveryAt,
+            readAt: null,
+          });
+      } catch (error) {
+        console.error("Could not notify sender of message delivery:", error);
+      }
+    }
 
     return res.status(200).json({
-      messages: messages.reverse().map(toMessageResponse),
+      messages: messages
+        .reverse()
+        .map((message) =>
+          undeliveredMessageIds.includes(message.id)
+            ? toMessageResponse({ ...message, deliveredAt: deliveryAt })
+            : toMessageResponse(message),
+        ),
     });
   } catch (error) {
     console.error("Could not load conversation messages:", error);
     return res.status(500).json({ message: "Unable to load messages." });
   }
+};
+
+const findMessageByClientId = async (clientMessageId, userId, conversationId) => {
+  if (!clientMessageId) return null;
+  const existing = await prisma.message.findUnique({
+    where: { clientMessageId },
+    include: {
+      sender: {
+        select: { id: true, name: true, avatar: { select: { avatar: true } } },
+      },
+    },
+  });
+  if (!existing) return null;
+  if (
+    existing.senderId !== userId ||
+    existing.conversationId !== conversationId
+  ) {
+    const error = new Error("Message id was already used.");
+    error.status = 409;
+    throw error;
+  }
+  return existing;
 };
 
 export const sendMessage = async (req, res) => {
@@ -318,6 +387,18 @@ export const sendMessage = async (req, res) => {
   try {
     const content =
       typeof req.body?.content === "string" ? req.body.content.trim() : "";
+    const clientMessageId =
+      typeof req.body?.clientMessageId === "string"
+        ? req.body.clientMessageId
+        : "";
+    if (
+      clientMessageId &&
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        clientMessageId,
+      )
+    ) {
+      return res.status(400).json({ message: "Invalid message identifier." });
+    }
     if (content.length > MAX_MESSAGE_LENGTH) {
       return res.status(400).json({
         message: `Messages must be ${MAX_MESSAGE_LENGTH} characters or fewer.`,
@@ -327,6 +408,15 @@ export const sendMessage = async (req, res) => {
       return res.status(400).json({
         message: "Write a message or attach a file.",
       });
+    }
+
+    const existing = await findMessageByClientId(
+      clientMessageId,
+      req.user.id,
+      req.chatConversation.id,
+    );
+    if (existing) {
+      return res.status(200).json({ message: toMessageResponse(existing) });
     }
 
     let attachmentData = {};
@@ -355,6 +445,7 @@ export const sendMessage = async (req, res) => {
           conversationId: req.chatConversation.id,
           senderId: req.user.id,
           content: content || null,
+          clientMessageId: clientMessageId || null,
           ...attachmentData,
         },
         include: {
@@ -398,6 +489,56 @@ export const sendMessage = async (req, res) => {
 
     return res.status(201).json({ message: responseMessage });
   } catch (error) {
+    if (error?.status === 409) {
+      if (uploadedPath) {
+        try {
+          const { error: cleanupError } = await supabase.storage
+            .from(PRIVATE_MESSAGE_BUCKET)
+            .remove([uploadedPath]);
+          if (cleanupError) {
+            console.error(
+              "Could not remove conflicting message attachment:",
+              cleanupError,
+            );
+          }
+        } catch (cleanupError) {
+          console.error(
+            "Could not remove conflicting message attachment:",
+            cleanupError,
+          );
+        }
+      }
+      return res.status(409).json({ message: error.message });
+    }
+
+    if (error?.code === "P2002" && req.body?.clientMessageId) {
+      try {
+        const existing = await findMessageByClientId(
+          req.body.clientMessageId,
+          req.user.id,
+          req.chatConversation.id,
+        );
+        if (existing) {
+          if (uploadedPath) {
+            const { error: cleanupError } = await supabase.storage
+              .from(PRIVATE_MESSAGE_BUCKET)
+              .remove([uploadedPath]);
+            if (cleanupError) {
+              console.error(
+                "Could not remove duplicate message attachment:",
+                cleanupError,
+              );
+            }
+          }
+          return res.status(200).json({ message: toMessageResponse(existing) });
+        }
+      } catch (lookupError) {
+        if (lookupError.status === 409) {
+          return res.status(409).json({ message: lookupError.message });
+        }
+        console.error("Could not retrieve retried chat message:", lookupError);
+      }
+    }
     if (uploadedPath && !persisted) {
       try {
         const { error: cleanupError } = await supabase.storage

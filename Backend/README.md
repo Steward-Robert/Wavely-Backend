@@ -19,6 +19,11 @@ npx prisma validate
 npx prisma generate
 ```
 
+`prisma/migrations/20261102100000_add_chat_status_and_presence/migration.sql`
+adds idempotency IDs and delivery/read timestamps to messages, plus the
+user's last-seen timestamp. Apply both migrations before deploying the matching
+backend and frontend versions.
+
 Apply migrations as a separate deployment step, after reviewing the target
 `DATABASE_URL`:
 
@@ -42,4 +47,8 @@ the allowlist, and set `VITE_SOCKET_URL` to the backend origin when it differs
 from the configured API server. Conversation rooms are joined only after the
 server confirms conversation membership and an active accepted friendship.
 Message content and media are persisted through the authenticated REST API;
-Socket.IO distributes committed messages to connected participants.
+Socket.IO distributes committed messages and message-status updates. Presence
+counts active sockets per user so multiple tabs/devices do not mark a user
+offline prematurely. Presence and room state are held in process memory; a
+multi-instance Render deployment requires a shared Socket.IO adapter and
+shared presence store to coordinate across instances.

@@ -109,9 +109,12 @@ test("message responses expose protected media routes, not storage paths", () =>
   const response = toMessageResponse({
     id: "message-id",
     conversationId: "conversation-id",
+    clientMessageId: "client-message-id",
     sender: { id: "user-a", name: "A" },
     content: null,
     createdAt: new Date("2026-10-30T00:00:00Z"),
+    deliveredAt: new Date("2026-10-30T00:01:00Z"),
+    readAt: new Date("2026-10-30T00:02:00Z"),
     attachmentPath: "Messages/conversation-id/private-file",
     attachmentMimeType: "image/png",
     attachmentName: "photo.png",
@@ -123,4 +126,7 @@ test("message responses expose protected media routes, not storage paths", () =>
     mediaUrl: "/api/chat/messages/message-id/media",
   });
   assert.equal("attachmentPath" in response, false);
+  assert.equal(response.clientMessageId, "client-message-id");
+  assert.equal(response.deliveredAt.toISOString(), "2026-10-30T00:01:00.000Z");
+  assert.equal(response.readAt.toISOString(), "2026-10-30T00:02:00.000Z");
 });

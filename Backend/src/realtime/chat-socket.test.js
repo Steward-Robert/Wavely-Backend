@@ -29,13 +29,32 @@ test("Socket.IO authenticates only active users with the JWT cookie", async (t) 
   const httpServer = createServer();
   const jwtSecret = "chat-test-secret";
   const activeUsers = new Set(["user-a", "user-b", "user-c"]);
+  const lastSeenAt = "2026-10-31T12:00:00.000Z";
+  const deliveredAt = "2026-11-01T12:00:00.000Z";
+  const readAt = "2026-11-01T12:01:00.000Z";
   const io = createChatSocketServer(httpServer, ["http://localhost:5173"], {
     jwtSecret,
     findActiveUser: async (id) =>
-      activeUsers.has(id) ? { id, isActive: true } : null,
+      activeUsers.has(id) ? { id, isActive: true, name: id } : null,
     canJoinConversation: async (conversationId, userId) =>
       conversationId === "conversation-a" &&
       ["user-a", "user-b"].includes(userId),
+    hasFriendAccess: async (firstUserId, secondUserId) =>
+      [firstUserId, secondUserId].sort().join(":") === "user-a:user-b",
+    findLastSeen: async () => ({ lastSeenAt }),
+    updateLastSeen: async (_userId, value) => ({ lastSeenAt: value }),
+    persistMessageDelivery: async ({ messageId }) => ({
+      senderId: "user-a",
+      messageIds: [messageId],
+      deliveredAt,
+      readAt: null,
+    }),
+    persistConversationRead: async () => ({
+      senderId: "user-a",
+      messageIds: ["message-a"],
+      deliveredAt,
+      readAt,
+    }),
   });
   await new Promise((resolve) => httpServer.listen(0, "127.0.0.1", resolve));
   const url = `http://127.0.0.1:${httpServer.address().port}`;
@@ -124,6 +143,10 @@ test("Socket.IO authenticates only active users with the JWT cookie", async (t) 
     { ok: true },
   );
   assert.deepEqual(
+    await joinConversation(clientAResult.client, "conversation-a"),
+    { ok: true },
+  );
+  assert.deepEqual(
     await joinConversation(clientCResult.client, "conversation-a"),
     { ok: false, message: "Conversation not found." },
   );
@@ -131,9 +154,101 @@ test("Socket.IO authenticates only active users with the JWT cookie", async (t) 
     .in("conversation:conversation-a")
     .fetchSockets();
   assert.deepEqual(
-    roomMembers.map((socket) => socket.data.userId),
-    ["user-b"],
+    roomMembers.map((socket) => socket.data.userId).sort(),
+    ["user-a", "user-b"],
   );
+
+  const typingReceived = new Promise((resolve) =>
+    clientBResult.client.once("chat:typing", resolve),
+  );
+  clientAResult.client.emit("chat:typing", {
+    conversationId: "conversation-a",
+    isTyping: true,
+  });
+  assert.deepEqual(await typingReceived, {
+    conversationId: "conversation-a",
+    userId: "user-a",
+    name: "user-a",
+    isTyping: true,
+  });
+  const typingStopped = new Promise((resolve) =>
+    clientBResult.client.once("chat:typing", resolve),
+  );
+  clientAResult.client.emit("chat:typing", {
+    conversationId: "conversation-a",
+    isTyping: false,
+  });
+  assert.deepEqual(await typingStopped, {
+    conversationId: "conversation-a",
+    userId: "user-a",
+    name: "user-a",
+    isTyping: false,
+  });
+
+  const presenceResult = await new Promise((resolve) => {
+    clientAResult.client.emit(
+      "presence:watch",
+      { userId: "user-b" },
+      resolve,
+    );
+  });
+  assert.deepEqual(presenceResult, {
+    ok: true,
+    userId: "user-b",
+    isOnline: true,
+    lastSeenAt,
+  });
+  const deniedPresence = await new Promise((resolve) => {
+    clientCResult.client.emit(
+      "presence:watch",
+      { userId: "user-a" },
+      resolve,
+    );
+  });
+  assert.deepEqual(deniedPresence, {
+    ok: false,
+    message: "Presence is unavailable.",
+  });
+
+  const secondDeviceResult = await connectClient(url, tokenB);
+  clients.push(secondDeviceResult.client);
+  assert.equal(secondDeviceResult.error, undefined);
+
+  const deliveryStatus = new Promise((resolve) =>
+    clientAResult.client.once("chat:message-status", resolve),
+  );
+  const deliveredAcknowledgement = new Promise((resolve) => {
+    clientBResult.client.emit(
+      "chat:delivered",
+      { conversationId: "conversation-a", messageId: "message-a" },
+      resolve,
+    );
+  });
+  assert.deepEqual(await deliveredAcknowledgement, { ok: true });
+  assert.deepEqual(await deliveryStatus, {
+    conversationId: "conversation-a",
+    messageIds: ["message-a"],
+    deliveredAt,
+    readAt: null,
+  });
+
+  const readStatus = new Promise((resolve) =>
+    clientAResult.client.once("chat:message-status", resolve),
+  );
+  const readAcknowledgement = new Promise((resolve) => {
+    clientBResult.client.emit(
+      "chat:read",
+      { conversationId: "conversation-a", messageIds: ["message-a"] },
+      resolve,
+    );
+  });
+  assert.deepEqual(await readAcknowledgement, { ok: true });
+  assert.deepEqual(await readStatus, {
+    conversationId: "conversation-a",
+    messageIds: ["message-a"],
+    deliveredAt,
+    readAt,
+  });
 
   const delivered = new Promise((resolve) =>
     clientBResult.client.once("chat:message", resolve),
@@ -146,4 +261,21 @@ test("Socket.IO authenticates only active users with the JWT cookie", async (t) 
     conversationId: "conversation-a",
     content: "private",
   });
+
+  let prematurelyOffline = false;
+  clientAResult.client.once("presence:update", ({ isOnline }) => {
+    prematurelyOffline = !isOnline;
+  });
+  clientBResult.client.disconnect();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(prematurelyOffline, false);
+
+  const offlinePresence = new Promise((resolve) =>
+    clientAResult.client.once("presence:update", resolve),
+  );
+  secondDeviceResult.client.disconnect();
+  const offlineUpdate = await offlinePresence;
+  assert.equal(offlineUpdate.userId, "user-b");
+  assert.equal(offlineUpdate.isOnline, false);
+  assert.equal(typeof offlineUpdate.lastSeenAt, "string");
 });

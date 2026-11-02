@@ -55,8 +55,11 @@ export const getConversationPeerId = (conversation, userId) => {
 export const toMessageResponse = (message) => ({
   id: message.id,
   conversationId: message.conversationId,
+  clientMessageId: message.clientMessageId ?? null,
   content: message.content,
   createdAt: message.createdAt,
+  deliveredAt: message.deliveredAt ?? null,
+  readAt: message.readAt ?? null,
   sender: message.sender,
   attachment:
     message.attachmentPath && message.attachmentMimeType && message.attachmentName

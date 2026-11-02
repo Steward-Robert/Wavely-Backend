@@ -13,6 +13,7 @@ model User {
   name           String
   password       String
   createdAt      DateTime  @default(now())
+  lastSeenAt     DateTime?
   role           Role      @default(USER)
   isActive       Boolean   @default(true)
   comments       Comment[]
@@ -91,6 +92,9 @@ model Message {
   attachmentPath      String?
   attachmentMimeType  String?
   attachmentName      String?
+  clientMessageId     String?      @unique
+  deliveredAt         DateTime?
+  readAt              DateTime?
   createdAt           DateTime     @default(now())
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
